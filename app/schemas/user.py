@@ -1,5 +1,9 @@
 class UserRegister:
-    fullname: str
     username: str
-    password: str
+    fullname: str
     email: str
+    password: str
+
+class UserLogin:
+    email: str
+    password: str
