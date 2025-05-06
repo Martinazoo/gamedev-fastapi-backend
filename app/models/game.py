@@ -1,15 +1,21 @@
-from sqlalchemy import Column, Integer, Table, String, ForeignKey
+# app/models/game.py
+from typing import List
+from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.db.base import Base
-from sqlalchemy.orm import relationship, Mapped, mapped_column, relationship
-from typing import Optional, List
+
 class Game(Base):
-    __tablename__= "games"
-    
-    id: Mapped[int] = mapped_column(primary_key=True, nullable=False, autoincrement=True)
-    name: Mapped[str] = mapped_column(nullable=False, unique=True)
-    max_score: Mapped[int] = mapped_column(nullable=False, default=0)
-    played_by: Mapped[List["UserGame"]] = relationship( # type: ignore
+    __tablename__ = "games"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    # Relación inversa con UserGame
+    users: Mapped[List["UserGame"]] = relationship(
         "UserGame",
-        back_populates="game"
+        back_populates="game",
+        cascade="all, delete-orphan"
     )
-    
+
+    def __repr__(self):
+        return f"Game(id={self.id!r}, name={self.name!r})"
