@@ -10,12 +10,3 @@ class Game(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    # Relación inversa con UserGame
-    users: Mapped[List["UserGame"]] = relationship(
-        "UserGame",
-        back_populates="game",
-        cascade="all, delete-orphan"
-    )
-
-    def __repr__(self):
-        return f"Game(id={self.id!r}, name={self.name!r})"

@@ -8,14 +8,5 @@ class UserGame(Base):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     game_id: Mapped[int] = mapped_column(ForeignKey("games.id"), primary_key=True)
-    time_played: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    high_score: Mapped[int] = mapped_column(Integer, default = 0, nullable=False)
 
-    # Relaciones a User y Game
-    user: Mapped[User] = relationship(
-        "User",
-        back_populates="games_played"
-    )
-    game: Mapped["Game"] = relationship(
-        "Game",
-        back_populates="users"
-    )
