@@ -2,8 +2,8 @@ from pydantic import BaseModel
 
 class CreateMarbles(BaseModel):
     color: str
-    user_id: str
+    username: str
 
 class LeaveMarbles(BaseModel):
-    id: int
+    username: str
 

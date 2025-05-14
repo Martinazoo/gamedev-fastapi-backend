@@ -42,3 +42,10 @@ async def login_user(user: UserLogin, session: AsyncSession = Depends(get_async_
         raise HTTPException(400, "Invalid email or password")
 
     return {"message": "Login successful", "user": u}
+
+@authRouter.get("/all")
+async def get_all_users(session: AsyncSession = Depends(get_async_session)):
+    users_query = select(User)
+    result = await session.execute(users_query)
+    users = result.scalars().all()
+    return users
