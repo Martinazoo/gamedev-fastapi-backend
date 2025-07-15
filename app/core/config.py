@@ -5,10 +5,16 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
 
     DATABASE_URL: str
-    # JWT (si usas autenticación)
+
+    # JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    # OAuth Google
+    google_client_id: str
+    google_client_secret: str
+    google_redirect_uri: str
 
     class Config:
         env_file = ".env"

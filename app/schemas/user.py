@@ -17,5 +17,14 @@ class UserRegister(BaseModel):
             raise ValueError("Password must contain at least one number")
         return v
 class UserLogin(BaseModel):
-    email: str
+    identifier: str
     password: str
+from pydantic import BaseModel
+
+class UserRead(BaseModel):
+    username: str
+    email: str
+    fullname: str
+
+    class Config:
+        orm_mode = True
