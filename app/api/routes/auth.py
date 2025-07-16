@@ -126,7 +126,10 @@ async def google_callback(code: str, session: AsyncSession = Depends(get_async_s
         expires_delta=access_token_expires
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    params = urlencode({"token": access_token})
+    frontend_redirect_url = f"{settings.FRONTEND_BASE_URL}/auth/google/callback?{params}"
+
+    return RedirectResponse(frontend_redirect_url)
 from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
 
