@@ -79,6 +79,9 @@ async def get_all_users(session: AsyncSession = Depends(get_async_session)):
     result = await session.execute(users_query)
     users = result.scalars().all()
     return users
+
+
+
 @authRouter.get("/google/callback")
 async def google_callback(code: str, session: AsyncSession = Depends(get_async_session)):
     token_url = "https://oauth2.googleapis.com/token"
@@ -145,3 +148,96 @@ async def google_login():
     }
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
     return RedirectResponse(url)
+
+
+
+@authRouter.get("/logout")
+async def logout_user(current_user: User = Depends(get_current_user)):
+
+
+    # Aquí podrías implementar la lógica de invalidación del token si es necesario
+    return {"message": "User logged out successfully"}
+
+
+@authRouter.get("/github/login")
+async def github_login():
+    return RedirectResponse(
+        f"https://github.com/login/oauth/authorize"
+        f"?client_id={settings.github_client_id}"
+        f"&scope=user:email",
+        status_code=302
+    )
+
+
+@authRouter.get("/github/callback")
+async def github_callback(code: str, session: AsyncSession = Depends(get_async_session)):
+    async with httpx.AsyncClient() as client:
+        # Obtener token
+        response = await client.post(
+            url="https://github.com/login/oauth/access_token",
+            data={
+                "client_id": settings.github_client_id,
+                "client_secret": settings.github_client_secret,
+                "code": code,
+            },
+            headers={"Accept": "application/json"}
+        )
+        token_data = response.json()
+        access_token = token_data.get("access_token")
+
+        # Obtener datos del usuario
+        user_response = await client.get(
+            url="https://api.github.com/user",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json"
+            }
+        )
+        user_data = user_response.json()
+
+        email = user_data.get("email")
+
+        # Si no viene el email, pedirlo desde /user/emails
+        if not email:
+            email_response = await client.get(
+                url="https://api.github.com/user/emails",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/json"
+                }
+            )
+            email_data = email_response.json()
+            primary_email = next(
+                (item["email"] for item in email_data if item.get("primary") and item.get("verified")),
+                None
+            )
+            if not primary_email:
+                raise HTTPException(400, "No se pudo obtener un email válido del usuario de GitHub.")
+            email = primary_email
+
+    # Buscar o crear usuario
+    stmt = select(User).where(User.email == email)
+    result = await session.execute(stmt)
+    u = result.scalars().first()
+
+    if not u:
+        u = User(
+            username=email.split("@")[0],
+            fullname=user_data.get("name") or "",
+            email=email,
+            password=hash_password("github_oauth_dummy")
+        )
+        session.add(u)
+        await session.commit()
+        await session.refresh(u)
+
+    # Crear token JWT
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    jwt_token = create_access_token(
+        data={"sub": u.username},
+        expires_delta=access_token_expires
+    )
+
+    params = urlencode({"token": jwt_token})
+    frontend_redirect_url = f"{settings.FRONTEND_BASE_URL}/auth/github/callback?{params}"
+    return RedirectResponse(frontend_redirect_url)
