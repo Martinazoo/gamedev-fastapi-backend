@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, HttpUrl
 import re
 class UserRegister(BaseModel):
     username: str
@@ -28,3 +28,16 @@ class UserRead(BaseModel):
 
     class Config:
         orm_mode = True
+
+class UserPublic(BaseModel):
+    username: str
+    profile_image: str | None = None
+    total_score: int
+
+    class Config:
+        orm_mode = True
+
+
+
+class AvatarUpdate(BaseModel):
+    profile_image: HttpUrl

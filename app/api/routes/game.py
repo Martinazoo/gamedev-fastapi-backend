@@ -44,7 +44,9 @@ async def get_ranking(session: AsyncSession = Depends(get_async_session)):
     return [
         {
             "username": user.username,
-            "high_score": user_game.high_score
+            "high_score": user_game.high_score,
+            "profile_image": user.profile_image,
+            "total_score": user.total_score
         }
             for user_game, user in ranking
     ]

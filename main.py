@@ -24,3 +24,4 @@ async def on_startup():
 app.include_router(authRouter)
 app.include_router(gameRouter)
 app.include_router(marblesRouter)
+app.include_router(usersRouter)
