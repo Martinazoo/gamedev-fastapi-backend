@@ -2,26 +2,27 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, desc, update, insert, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.security import get_current_user
 from app.models import UserGame, Game, User
 from app.schemas.game import Ranking, CreateGame
 from app.db.session import get_async_session
 from sqlalchemy.orm import selectinload
-
+from app.core.user_games import update_user_total_score
 gameRouter = APIRouter(prefix="/game", tags=["game"])
 
-'''
+@gameRouter.get("/get-game-by-name/{game}")
 async def get_game_by_name(game: str, session: AsyncSession = Depends(get_async_session)):
     query = select(Game).where(Game.name == game)
     id_exec = await session.execute(query)
     id = id_exec.scalars().first()
     return id
-'''
-'''
-async def get_user_by_id(id: int, session: AsyncSession = Depends(get_async_session)):
+
+@gameRouter.get("/get-game-by-id/{id}")
+async def get_game_by_id(id: int, session: AsyncSession = Depends(get_async_session)):
     query = select(Game).where(Game.id == id)
     result = await session.execute(query)
     return result.scalars().first()
-'''
+
 
 @gameRouter.get("/ranking")
 async def get_ranking(session: AsyncSession = Depends(get_async_session)):
@@ -52,58 +53,61 @@ async def get_ranking(session: AsyncSession = Depends(get_async_session)):
     ]
 
 
-@gameRouter.post("/set-highscore")
+@gameRouter.post("/highscore")
 async def set_ranking(rank: Ranking, session: AsyncSession = Depends(get_async_session)):
     user_query = select(User).where(User.username == rank.username)
     result = await session.execute(user_query)
     existing_user = result.scalars().first()
 
-    if existing_user is None:
+    if not existing_user:
         raise HTTPException(400, "User does not exist")
     
     query_gameid = select(Game).where(Game.name == rank.gamename)
     id_exec = await session.execute(query_gameid)
     game = id_exec.scalars().first()
 
-    if game is None:
+    if not game:
         raise HTTPException(400, "Game does not exist")
-    
+
     game_id = game.id
+    user_id = existing_user.id
 
     high_score_query = select(UserGame).where(
-        and_(
-            UserGame.user_id == existing_user.id,
-            UserGame.game_id == game_id
-        )
+        and_(UserGame.user_id == user_id, UserGame.game_id == game_id)
     )
     res = await session.execute(high_score_query)
     a_high_score = res.scalars().first()
 
     if a_high_score is None:
         insert_query = insert(UserGame).values(
-            user_id=existing_user.id,
+            user_id=user_id,
             game_id=game_id,
             high_score=rank.score
         )
         await session.execute(insert_query)
-        await session.commit()
+        await update_user_total_score(user_id, session)
         return {"message": "High Score created successfully"}
     
     if rank.score > a_high_score.high_score:
-        update_high_score_query = update(UserGame).where(
-            and_(
-                UserGame.user_id == existing_user.id,
-                UserGame.game_id == game_id
+        update_high_score_query = (
+            update(UserGame)
+            .where(
+                and_(
+                    UserGame.user_id == user_id,
+                    UserGame.game_id == game_id
+                )
             )
-        ).values(high_score=rank.score)
+            .values(high_score=rank.score)
+        )
         await session.execute(update_high_score_query)
-        await session.commit()
+        await update_user_total_score(user_id, session)
         return {"message": "High Score updated successfully"}
 
     return {"message": "Score is not higher than current high score"}
 
 
-@gameRouter.post("/create-game")
+
+@gameRouter.post("/game")
 async def create_game(game: CreateGame, session: AsyncSession = Depends(get_async_session)):
     exists = select(Game).where(Game.name == game.name)
     result = await session.execute(exists)
@@ -124,3 +128,73 @@ async def get_all_games(session: AsyncSession = Depends(get_async_session)):
     result = await session.execute(select_games)
     games = result.scalars().all()
     return games
+
+@gameRouter.get("/get-all-games-from-current-user")
+async def get_all_games_from_current_user(
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_user)
+):
+    username = current_user.username
+    # Obtener el usuario primero
+    user_query = select(User).where(User.username == username)
+    user_result = await session.execute(user_query)
+    user = user_result.scalars().first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Obtener los juegos jugados por ese usuario junto con su información
+    user_games_query = (
+        select(UserGame, Game)
+        .join(Game, UserGame.game_id == Game.id)
+        .where(UserGame.user_id == user.id)
+    )
+    result = await session.execute(user_games_query)
+    user_games = result.all()
+
+    if not user_games:
+        raise HTTPException(status_code=404, detail="No games found for this user")
+
+    return [
+        {
+            "game_name": game.name,
+            "high_score": user_game.high_score,
+            "game_id": game.id
+        }
+        for user_game, game in user_games
+    ]
+
+
+@gameRouter.get("/get-all-games-from-user/{username}")
+async def get_all_games_from_user(
+    username: str,
+    session: AsyncSession = Depends(get_async_session)
+):
+    # Obtener el usuario primero
+    user_query = select(User).where(User.username == username)
+    user_result = await session.execute(user_query)
+    user = user_result.scalars().first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Obtener los juegos jugados por ese usuario junto con su información
+    user_games_query = (
+        select(UserGame, Game)
+        .join(Game, UserGame.game_id == Game.id)
+        .where(UserGame.user_id == user.id)
+    )
+    result = await session.execute(user_games_query)
+    user_games = result.all()
+
+    if not user_games:
+        raise HTTPException(status_code=404, detail="No games found for this user")
+
+    return [
+        {
+            "game_name": game.name,
+            "high_score": user_game.high_score,
+            "game_id": game.id
+        }
+        for user_game, game in user_games
+    ]
