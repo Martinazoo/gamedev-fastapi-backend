@@ -14,3 +14,4 @@ class User(Base):
     password: Mapped[str] = mapped_column(String, nullable=False)
     profile_image: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     total_score: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    

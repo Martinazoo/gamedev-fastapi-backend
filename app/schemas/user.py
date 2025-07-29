@@ -19,12 +19,21 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     identifier: str
     password: str
-from pydantic import BaseModel
 
 class UserRead(BaseModel):
     username: str
     email: str
     fullname: str
+
+    class Config:
+        orm_mode = True
+
+
+
+class UserPublic(BaseModel):
+    username: str
+    profile_image: str | None = None
+    total_score: int
 
     class Config:
         orm_mode = True

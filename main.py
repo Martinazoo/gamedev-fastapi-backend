@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import *
+from app.api.routes import authRouter, gameRouter, marblesRouter, usersRouter
 from app.db.init_db import init_db
 
 app = FastAPI(
@@ -24,3 +24,4 @@ async def on_startup():
 app.include_router(authRouter)
 app.include_router(gameRouter)
 app.include_router(marblesRouter)
+app.include_router(usersRouter)
