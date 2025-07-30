@@ -19,7 +19,6 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     identifier: str
     password: str
-from pydantic import BaseModel
 
 class UserRead(BaseModel):
     username: str
