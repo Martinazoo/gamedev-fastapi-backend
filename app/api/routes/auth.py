@@ -109,6 +109,7 @@ async def google_callback(code: str, session: AsyncSession = Depends(get_async_s
             username=google_user["email"].split("@")[0],
             fullname=google_user.get("name", ""),
             email=google_user["email"],
+            profile_image=google_user.get("picture"),
             password=hash_password("google_oauth_dummy")  # dummy para cumplir esquema
         )
         session.add(u)
@@ -218,6 +219,7 @@ async def github_callback(code: str, session: AsyncSession = Depends(get_async_s
             username=email.split("@")[0],
             fullname=user_data.get("name") or "",
             email=email,
+            profile_image=user_data.get("avatar_url"),
             password=hash_password("github_oauth_dummy")
         )
         session.add(u)
