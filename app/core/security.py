@@ -1,3 +1,4 @@
+import re
 from passlib.context import CryptContext
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -72,3 +73,35 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+def validate_password(password: str) -> None:
+    """
+    Valida que la contraseña cumpla con:
+    - Mínimo 8 caracteres
+    - Al menos una mayúscula
+    - Al menos una minúscula
+    - Al menos un símbolo
+    """
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña debe tener al menos 8 caracteres."
+        )
+
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña debe contener al menos una letra mayúscula."
+        )
+
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña debe contener al menos una letra minúscula."
+        )
+
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>_\-+=;'/\\\[\]]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña debe contener al menos un símbolo."
+        )

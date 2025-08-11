@@ -1,7 +1,7 @@
 import asyncio
 from app.db.session import engine
 from app.db.base import Base
-from app.models import Game, User, UserGame 
+from app.models import *
 
 async def init_db():
     async with engine.begin() as conn:

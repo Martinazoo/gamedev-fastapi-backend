@@ -7,3 +7,4 @@ class SubmitGameSession(BaseModel):
     username: str
     gamename: str
     score: int
+    time_played: int = 0

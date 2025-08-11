@@ -31,12 +31,18 @@ class UserRead(BaseModel):
 class UserPublic(BaseModel):
     username: str
     profile_image: str | None = None
-    total_score: int
+    total_score: int = 0
 
     class Config:
         orm_mode = True
-
+        from_attributes = True  # <-- add this line
 
 
 class AvatarUpdate(BaseModel):
     profile_image: HttpUrl
+
+class UserUpdate(BaseModel):
+    username: str | None = None
+    email: EmailStr | None = None
+    fullname: str | None = None
+    password: str | None = None

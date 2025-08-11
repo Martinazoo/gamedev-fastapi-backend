@@ -1,8 +1,8 @@
-from sqlalchemy import Column, Integer, Table, String, ForeignKey
+# app/models/user.py
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Integer, String
+from typing import List, Optional
 from app.db.base import Base
-from sqlalchemy.orm import relationship, Mapped, mapped_column, relationship
-from typing import Optional, List
-
 
 class User(Base):
     __tablename__ = "users"
@@ -13,5 +13,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String, nullable=False)
     profile_image: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    total_score: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    
+
+    game_sessions: Mapped[List["GameSession"]] = relationship("GameSession", back_populates="user")
+
+    class Config:
+        from_attributes = True
