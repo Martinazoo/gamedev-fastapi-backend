@@ -65,7 +65,7 @@ async def get_total_score_ranking(period: str, game_id: str, session: AsyncSessi
         raise HTTPException(400, "Invalid period")
 
     stmt = select(
-        User.username,
+        User.username, User.profile_image,
         func.sum(GameSession.score).label("total_score")
     ).join(User, User.id == GameSession.user_id)
 
@@ -80,7 +80,12 @@ async def get_total_score_ranking(period: str, game_id: str, session: AsyncSessi
     result = await session.execute(stmt)
     rows = result.all()
 
-    return [{"username": r.username, "total_score": r.total_score} for r in rows]
+    return [{
+        "username": r.username, 
+        "total_score": r.total_score,
+        "profile_image": r.profile_image 
+        
+        } for r in rows]
 
 
 @gameRouter.get("/ranking/highscore/{game_id}")
