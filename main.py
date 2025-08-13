@@ -1,11 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import authRouter, gameRouter, marblesRouter, usersRouter
 from app.db.init_db import init_db
+from app.core.security import get_current_user  
+from app.models import User
 
 app = FastAPI(
-    title="Mi Proyecto FastAPI",
-    description="API de ejemplo con estructura modular",
+    title="Gamedev",
+    description="GameDev API",
     version="1.0.0"
 )
 
@@ -20,8 +22,19 @@ app.add_middleware(
 @app.on_event("startup")
 async def on_startup():
     await init_db()
-    
-app.include_router(authRouter)
-app.include_router(gameRouter)
-app.include_router(marblesRouter)
-app.include_router(usersRouter)
+
+# Rutas públicas
+app.include_router(authRouter)  # login, register, oauth
+
+# Rutas protegidas con token
+app.include_router(
+    gameRouter,
+    dependencies=[Depends(get_current_user)]
+)
+app.include_router(
+    marblesRouter
+)
+app.include_router(
+    usersRouter,
+    dependencies=[Depends(get_current_user)]
+)
