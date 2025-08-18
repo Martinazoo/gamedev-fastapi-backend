@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import authRouter, gameRouter, marblesRouter, usersRouter
+from app.api.routes import *
 from app.db.init_db import init_db
 from app.core.security import get_current_user  
 from app.models import User
@@ -37,4 +37,7 @@ app.include_router(
 app.include_router(
     usersRouter,
     dependencies=[Depends(get_current_user)]
+)
+app.include_router(
+    arcadeRouter
 )
