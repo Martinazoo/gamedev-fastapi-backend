@@ -30,12 +30,11 @@ def set_auth_cookie(response: Response, token: str):
         key="access_token",
         value=token,
         httponly=True,
-        secure=settings.ENV == "production",   # Secure solo en prod (HTTPS)
-        samesite="none",                       # permite cross-site
-        domain=".gamedev.study" if settings.ENV == "production" else None,  # válido en subdominios
+        secure=settings.ENV == "production",   # HTTPS solo en prod
+        samesite="none" if settings.ENV == "production" else "lax",
+        domain=".gamedev.study" if settings.ENV == "production" else None,
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
-
 
 # -----------------------
 # Endpoints
@@ -107,8 +106,8 @@ async def login_user(
 @authRouter.get("/google/login")
 async def google_login():
     params = {
-        "client_id": settings.google_client_id,
-        "redirect_uri": settings.google_redirect_uri,
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
         "response_type": "code",
         "scope": "openid email profile",
         "access_type": "offline",
@@ -117,34 +116,32 @@ async def google_login():
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
     return RedirectResponse(url)
 
-
+# Google OAuth callback
 @authRouter.get("/google/callback")
 async def google_callback(
     code: str,
-    response: Response,
     session: AsyncSession = Depends(get_async_session)
 ):
-    token_url = "https://oauth2.googleapis.com/token"
-    params = {
-        "code": code,
-        "client_id": settings.google_client_id,
-        "client_secret": settings.google_client_secret,
-        "redirect_uri": settings.google_redirect_uri,
-        "grant_type": "authorization_code",
-    }
-
     async with httpx.AsyncClient() as client:
-        resp = await client.post(token_url, data=params)
-        if resp.status_code != 200:
+        token_resp = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code"
+            }
+        )
+        if token_resp.status_code != 200:
             raise HTTPException(400, "Failed to get access token from Google")
-        token_data = resp.json()
+        token_data = token_resp.json()
 
-        userinfo_url = "https://www.googleapis.com/oauth2/v2/userinfo"
-        headers = {"Authorization": f"Bearer {token_data['access_token']}"}
-        userinfo_resp = await client.get(userinfo_url, headers=headers)
-        if userinfo_resp.status_code != 200:
-            raise HTTPException(400, "Failed to fetch user info from Google")
-        google_user = userinfo_resp.json()
+        user_resp = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {token_data['access_token']}"}
+        )
+        google_user = user_resp.json()
 
     stmt = select(User).where(User.email == google_user["email"])
     result = await session.execute(stmt)
@@ -160,14 +157,14 @@ async def google_callback(
         await session.commit()
         await session.refresh(u)
 
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": u.username}, expires_delta=access_token_expires
+        data={"sub": u.username},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
-    set_auth_cookie(response, access_token)
-
-    return RedirectResponse(f"{settings.FRONTEND_BASE_URL}/auth/success")
+    redirect = RedirectResponse(f"{settings.FRONTEND_BASE_URL}/auth/google/callback")
+    set_auth_cookie(redirect, access_token)  # se setea cookie en la respuesta de redirección
+    return redirect
 
 
 # -----------------------
@@ -177,57 +174,49 @@ async def google_callback(
 async def github_login():
     return RedirectResponse(
         f"https://github.com/login/oauth/authorize"
-        f"?client_id={settings.github_client_id}"
+        f"?client_id={settings.GITHUB_CLIENT_ID}"
         f"&scope=user:email",
         status_code=302
     )
 
-
+# GitHub OAuth callback
 @authRouter.get("/github/callback")
 async def github_callback(
     code: str,
-    response: Response,
     session: AsyncSession = Depends(get_async_session)
 ):
     async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            url="https://github.com/login/oauth/access_token",
+        token_resp = await client.post(
+            "https://github.com/login/oauth/access_token",
             data={
-                "client_id": settings.github_client_id,
-                "client_secret": settings.github_client_secret,
+                "client_id": settings.GITHUB_CLIENT_ID,
+                "client_secret": settings.GITHUB_CLIENT_SECRET,
                 "code": code,
             },
             headers={"Accept": "application/json"}
         )
-        token_data = resp.json()
-        access_token = token_data.get("access_token")
+        token_data = token_resp.json()
+        access_token_github = token_data.get("access_token")
 
-        user_response = await client.get(
-            url="https://api.github.com/user",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/json"
-            }
+        user_resp = await client.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"Bearer {access_token_github}"}
         )
-        user_data = user_response.json()
-        email = user_data.get("email")
+        user_data = user_resp.json()
 
+        email = user_data.get("email")
         if not email:
-            email_response = await client.get(
-                url="https://api.github.com/user/emails",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/json"
-                }
+            emails_resp = await client.get(
+                "https://api.github.com/user/emails",
+                headers={"Authorization": f"Bearer {access_token_github}"}
             )
-            email_data = email_response.json()
-            primary_email = next(
-                (item["email"] for item in email_data if item.get("primary") and item.get("verified")),
+            email_data = emails_resp.json()
+            email = next(
+                (e["email"] for e in email_data if e.get("primary") and e.get("verified")),
                 None
             )
-            if not primary_email:
+            if not email:
                 raise HTTPException(400, "No se pudo obtener un email válido del usuario de GitHub.")
-            email = primary_email
 
     stmt = select(User).where(User.email == email)
     result = await session.execute(stmt)
@@ -244,15 +233,14 @@ async def github_callback(
         await session.commit()
         await session.refresh(u)
 
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     jwt_token = create_access_token(
-        data={"sub": u.username}, expires_delta=access_token_expires
+        data={"sub": u.username},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
-    set_auth_cookie(response, jwt_token)
-
-    return RedirectResponse(f"{settings.FRONTEND_BASE_URL}/auth/success")
-
+    redirect = RedirectResponse(f"{settings.FRONTEND_BASE_URL}/auth/github/callback")
+    set_auth_cookie(redirect, jwt_token)
+    return redirect
 
 # -----------------------
 # Logout

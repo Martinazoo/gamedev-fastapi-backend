@@ -1,9 +1,11 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    # Información del proyecto
     PROJECT_NAME: str = "Mi API"
     VERSION: str = "1.0.0"
 
+    # Base de datos
     DATABASE_URL: str
 
     # JWT
@@ -11,18 +13,23 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Entorno
+    ENV: str = "development"  
+
     # OAuth Google
-    google_client_id: str
-    google_client_secret: str
-    google_redirect_uri: str
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+    GOOGLE_REDIRECT_URI: str
 
+    # OAuth Github
+    GITHUB_CLIENT_ID: str
+    GITHUB_CLIENT_SECRET: str
 
-    #OAuth Github
-    github_client_id: str
-    github_client_secret: str
-    FRONTEND_BASE_URL: str 
+    # Frontend
+    FRONTEND_BASE_URL: str
 
     class Config:
         env_file = ".env"
+        case_sensitive = True  
 
 settings = Settings()

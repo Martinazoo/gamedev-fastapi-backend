@@ -13,7 +13,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",   # tu frontend en dev (Vite/React)
+        "https://gamedev.study",   # dominio frontend en prod
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
