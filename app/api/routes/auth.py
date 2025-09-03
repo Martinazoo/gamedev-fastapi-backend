@@ -54,7 +54,19 @@ async def register_user(user: UserRegister, session: AsyncSession = Depends(get_
     stmt = select(User).where(User.email == user.email)
     result = await session.execute(stmt)
     if result.scalars().first():
-        return api_error(status_code=status.HTTP_400_BAD_REQUEST, message="Email already registered")
+        return api_error(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        message="Email already registered",
+        code="EMAIL_TAKEN"
+        )
+    stmt = select(User).where(User.username == user.username)
+    result = await session.execute(stmt)
+    if result.scalars().first():
+        return api_error(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Username already taken",
+            code="USERNAME_TAKEN"
+        )
 
     hashed_password = hash_password(user.password)
     new_user = User(
@@ -81,7 +93,7 @@ async def login_user(
     u = result.scalars().first()
 
     if not u or not verify_password(form_data.password, u.password):
-        return api_error(status_code=status.HTTP_400_BAD_REQUEST, message="Invalid username/email or password")
+        return api_error (code="INVALID_CREDENTIALS", status_code=status.HTTP_400_BAD_REQUEST, message="Invalid username/email or password")
 
     access_token = create_access_token(
         data={"sub": u.username},
