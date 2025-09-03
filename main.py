@@ -25,22 +25,11 @@ app.add_middleware(
 @app.on_event("startup")
 async def on_startup():
     await init_db()
+# Público
+app.include_router(authRouter)
 
-# Rutas públicas
-app.include_router(authRouter)  # login, register, oauth
-
-# Rutas protegidas con token
-app.include_router(
-    gameRouter,
-    dependencies=[Depends(get_current_user)]
-)
-app.include_router(
-    marblesRouter
-)
-app.include_router(
-    usersRouter,
-    dependencies=[Depends(get_current_user)]
-)
-app.include_router(
-    arcadeRouter
-)
+# Protegido
+app.include_router(gameRouter, dependencies=[Depends(get_current_user)])
+app.include_router(marblesRouter, dependencies=[Depends(get_current_user)])
+app.include_router(usersRouter, dependencies=[Depends(get_current_user)])
+app.include_router(arcadeRouter, dependencies=[Depends(get_current_user)])

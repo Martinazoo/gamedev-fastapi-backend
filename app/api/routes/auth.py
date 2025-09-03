@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
+from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, or_
@@ -16,6 +16,7 @@ from app.core.security import (
     verify_password,
     create_access_token,
     get_current_user,
+    api_error
 )
 from app.core.config import settings
 
@@ -30,35 +31,30 @@ def set_auth_cookie(response: Response, token: str):
         key="access_token",
         value=token,
         httponly=True,
-        secure=settings.ENV == "production",   # HTTPS solo en prod
+        secure=settings.ENV == "production",
         samesite="none" if settings.ENV == "production" else "lax",
         domain=".gamedev.study" if settings.ENV == "production" else None,
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
 
+
 # -----------------------
 # Endpoints
 # -----------------------
 
-# Obtener usuario actual
 @authRouter.get("/me")
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
 @authRouter.post("/register")
-async def register_user(
-    user: UserRegister,
-    session: AsyncSession = Depends(get_async_session),
-):
+async def register_user(user: UserRegister, session: AsyncSession = Depends(get_async_session)):
     validate_password(user.password)
 
     stmt = select(User).where(User.email == user.email)
     result = await session.execute(stmt)
-    u = result.scalars().first()
-
-    if u:
-        raise HTTPException(400, "Email already registered")
+    if result.scalars().first():
+        return api_error(status_code=status.HTTP_400_BAD_REQUEST, message="Email already registered")
 
     hashed_password = hash_password(user.password)
     new_user = User(
@@ -80,24 +76,41 @@ async def login_user(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_async_session)
 ):
-    identifier = form_data.username
-    password = form_data.password
-
-    stmt = select(User).where(or_(User.email == identifier, User.username == identifier))
+    stmt = select(User).where(or_(User.email == form_data.username, User.username == form_data.username))
     result = await session.execute(stmt)
     u = result.scalars().first()
 
-    if not u or not verify_password(password, u.password):
-        raise HTTPException(400, "Invalid username/email or password")
+    if not u or not verify_password(form_data.password, u.password):
+        return api_error(status_code=status.HTTP_400_BAD_REQUEST, message="Invalid username/email or password")
 
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": u.username}, expires_delta=access_token_expires
+        data={"sub": u.username},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-
     set_auth_cookie(response, access_token)
 
     return {"message": "Login successful"}
+
+
+# -----------------------
+# OAuth Helpers
+# -----------------------
+async def get_or_create_oauth_user(session: AsyncSession, email: str, fullname: str, username: str, profile_image: str = None, dummy_password: str = "oauth_dummy") -> User:
+    stmt = select(User).where(User.email == email)
+    result = await session.execute(stmt)
+    u = result.scalars().first()
+    if not u:
+        u = User(
+            username=username,
+            fullname=fullname,
+            email=email,
+            profile_image=profile_image,
+            password=hash_password(dummy_password)
+        )
+        session.add(u)
+        await session.commit()
+        await session.refresh(u)
+    return u
 
 
 # -----------------------
@@ -116,12 +129,9 @@ async def google_login():
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
     return RedirectResponse(url)
 
-# Google OAuth callback
+
 @authRouter.get("/google/callback")
-async def google_callback(
-    code: str,
-    session: AsyncSession = Depends(get_async_session)
-):
+async def google_callback(code: str, session: AsyncSession = Depends(get_async_session)):
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             "https://oauth2.googleapis.com/token",
@@ -134,7 +144,7 @@ async def google_callback(
             }
         )
         if token_resp.status_code != 200:
-            raise HTTPException(400, "Failed to get access token from Google")
+            return api_error(status_code=status.HTTP_400_BAD_REQUEST, message="Failed to get access token from Google")
         token_data = token_resp.json()
 
         user_resp = await client.get(
@@ -143,27 +153,20 @@ async def google_callback(
         )
         google_user = user_resp.json()
 
-    stmt = select(User).where(User.email == google_user["email"])
-    result = await session.execute(stmt)
-    u = result.scalars().first()
-    if not u:
-        u = User(
-            username=google_user["email"].split("@")[0],
-            fullname=google_user.get("name", ""),
-            email=google_user["email"],
-            password=hash_password("google_oauth_dummy")
-        )
-        session.add(u)
-        await session.commit()
-        await session.refresh(u)
+    u = await get_or_create_oauth_user(
+        session,
+        email=google_user["email"],
+        fullname=google_user.get("name", ""),
+        username=google_user["email"].split("@")[0]
+    )
 
-    access_token = create_access_token(
+    jwt_token = create_access_token(
         data={"sub": u.username},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     redirect = RedirectResponse(f"{settings.FRONTEND_BASE_URL}/auth/google/callback")
-    set_auth_cookie(redirect, access_token)  # se setea cookie en la respuesta de redirección
+    set_auth_cookie(redirect, jwt_token)
     return redirect
 
 
@@ -179,12 +182,9 @@ async def github_login():
         status_code=302
     )
 
-# GitHub OAuth callback
+
 @authRouter.get("/github/callback")
-async def github_callback(
-    code: str,
-    session: AsyncSession = Depends(get_async_session)
-):
+async def github_callback(code: str, session: AsyncSession = Depends(get_async_session)):
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             "https://github.com/login/oauth/access_token",
@@ -216,22 +216,16 @@ async def github_callback(
                 None
             )
             if not email:
-                raise HTTPException(400, "No se pudo obtener un email válido del usuario de GitHub.")
+                return api_error(status_code=status.HTTP_400_BAD_REQUEST, message="No valid email found for GitHub user")
 
-    stmt = select(User).where(User.email == email)
-    result = await session.execute(stmt)
-    u = result.scalars().first()
-    if not u:
-        u = User(
-            username=email.split("@")[0],
-            fullname=user_data.get("name") or "",
-            email=email,
-            profile_image=user_data.get("avatar_url"),
-            password=hash_password("github_oauth_dummy")
-        )
-        session.add(u)
-        await session.commit()
-        await session.refresh(u)
+    u = await get_or_create_oauth_user(
+        session,
+        email=email,
+        fullname=user_data.get("name") or "",
+        username=email.split("@")[0],
+        profile_image=user_data.get("avatar_url"),
+        dummy_password="github_oauth_dummy"
+    )
 
     jwt_token = create_access_token(
         data={"sub": u.username},
@@ -241,6 +235,7 @@ async def github_callback(
     redirect = RedirectResponse(f"{settings.FRONTEND_BASE_URL}/auth/github/callback")
     set_auth_cookie(redirect, jwt_token)
     return redirect
+
 
 # -----------------------
 # Logout

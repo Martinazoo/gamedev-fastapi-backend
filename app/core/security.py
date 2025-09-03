@@ -122,3 +122,11 @@ def validate_password(password: str) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La contraseña debe contener al menos un símbolo."
         )
+    
+from fastapi.responses import JSONResponse
+
+def api_error(code: str, message: str, status_code: int = 400):
+    return JSONResponse(
+        status_code=status_code,
+        content={"code": code, "message": message}
+    )
